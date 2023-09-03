@@ -96,9 +96,16 @@ def parse_args():
     )
 
     parser.add_argument(
+        "--nsens",
+        type=int,
+        default=3,
+        help="Number of sensors. Default valued is 10",
+    )
+
+    parser.add_argument(
         "--layers",
         type=int,
-        default=10,
+        default=20,
         help="Number of layers/iterations",
     )
 
@@ -177,6 +184,7 @@ ARGS = parse_args()
 # Model parameters
 ACF_ITERATIONS = ARGS.layers  # Number of TFOCS iterations/layers during forward
 AMBIENT_DIM = ARGS.amb  # AMBIENT_DIM -> Vectorized image pixels
+N_SENSORS = ARGS.nsens
 SPARSE_DIM = ARGS.red
 NUM_MEASUREMENTS = round(
     ARGS.meas * AMBIENT_DIM
@@ -199,8 +207,8 @@ NUM_EPOCHS = ARGS.epochs  # Epochs to train
 # Data Loading & Utility functions                                                    #
 #######################################################################################
 def get_data_loaders(train_batch_size, val_batch_size):
-    train_vecs = synthetic_generator(AMBIENT_DIM, 70000)
-    test_vecs = synthetic_generator(AMBIENT_DIM, 10000)
+    train_vecs = synthetic_generator(AMBIENT_DIM,N_SENSORS, 70000)
+    test_vecs = synthetic_generator(AMBIENT_DIM, N_SENSORS,10000)
     train = Synthetic(train_vecs)
     val = Synthetic(test_vecs)
     train_loader = DataLoader(
@@ -238,9 +246,9 @@ class TruncationActivation(nn.Module):
 class DECONET(nn.Module):
     def __init__(
         self,
-        ambient=300,
-        measurements=round(0.25 * 300),
-        sparse_dim=3000,
+        ambient=3000,
+        measurements=round(0.25 * 3000),
+        sparse_dim=30000,
         acf_iterations=10,
         alpha=0.7,
         beta=0.5,
@@ -534,9 +542,9 @@ if __name__ == "__main__":
     train_loader, val_loader = get_data_loaders(BATCH_SIZE, BATCH_SIZE)
 
     model = DECONET(
-        ambient=AMBIENT_DIM,
-        measurements=NUM_MEASUREMENTS,
-        sparse_dim=SPARSE_DIM,
+        ambient=AMBIENT_DIM*N_SENSORS,
+        measurements=NUM_MEASUREMENTS*N_SENSORS,
+        sparse_dim=SPARSE_DIM*N_SENSORS,
         acf_iterations=ACF_ITERATIONS,
         alpha=ALPHA,
         beta=BETA,
@@ -552,7 +560,7 @@ if __name__ == "__main__":
     early_stop = EARLY_ID
     epochs = NUM_EPOCHS
 
-    checkpoint_name = f"DECONET(synthetic)-{ARGS.layers}L-{ARGS.amb}-red{ARGS.red}-lr{ARGS.lr}-mu{ARGS.mu}-init{ARGS.init}.pt"
+    checkpoint_name = f"DECONET(synthetic)-{ARGS.layers}L-{ARGS.amb*ARGS.nsens}-red{ARGS.red}-lr{ARGS.lr}-mu{ARGS.mu}-init{ARGS.init}.pt"
 
     train(
         model,
