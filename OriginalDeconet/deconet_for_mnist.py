@@ -486,7 +486,7 @@ def train_step(
     loss.backward()
     optimizer.step()
 
-    return loss
+    return loss #to return also a_pred?
 
 
 def train_epoch(
@@ -646,3 +646,5 @@ if __name__ == "__main__":
         checkpoint_name,
         device=device,
     )
+
+

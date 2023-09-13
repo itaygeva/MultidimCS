@@ -35,16 +35,28 @@ class Synthetic(Dataset):
 
 def synthetic_generator(input_dim, n_sensors, set_size):
     noise = torch.normal(0, 0.01, size=(input_dim, n_sensors, set_size))
+    #print('noise',noise)
     cov_matrix = generate_highly_correlated_covariance_matrix(n_sensors)
-    cholesky_matrix = torch.cholesky(cov_matrix, upper=False)
-    print(cholesky_matrix)
+    cholesky_matrix = torch.linalg.cholesky(cov_matrix)
+    #print(cholesky_matrix)
     correlated_noise = torch.matmul(cholesky_matrix, noise)
     input_vectors = correlated_noise.view(input_dim*n_sensors, set_size)
 
     return input_vectors
 
 
+# def myfunc(x):
+#     return x
+
+
+
 if __name__ == "__main__":
     device = "cuda" if torch.cuda.is_available() else "cpu"
     a = synthetic_generator(100, 3, 1000)
-    print(a)
+    print(a.size())
+    # P1 = torch.rand(2, 6)
+    #
+    # print('list P1',list(P1))
+    # print('list P1 tag', list(P1.t()))
+    # #b=a.view(input_dim*n_sensors, set_size)
+    # #ys=map(myfunc,a)

@@ -199,8 +199,8 @@ NUM_EPOCHS = ARGS.epochs  # Epochs to train
 # Data Loading & Utility functions                                                    #
 #######################################################################################
 def get_data_loaders(train_batch_size, val_batch_size):
-    train_vecs = synthetic_generator(AMBIENT_DIM, 70000)
-    test_vecs = synthetic_generator(AMBIENT_DIM, 10000)
+    train_vecs = synthetic_generator(100,3, 7000)
+    test_vecs = synthetic_generator(100,3, 1000)
     train = Synthetic(train_vecs)
     val = Synthetic(test_vecs)
     train_loader = DataLoader(
@@ -271,9 +271,11 @@ class DECONET(nn.Module):
         self.first_activation = TruncationActivation()
         self.second_activation = ShrinkageActivation()
         A = torch.randn(measurements, ambient) / np.sqrt(self.measurements)
+        torch.save(A,'A.pt')
         self.register_buffer("A", A)
         phi = nn.Parameter(self._init_phi())
         self.register_parameter("phi", phi)
+        torch.save(phi, 'phi.pt')
 
     def _init_phi(self):
 
@@ -338,28 +340,28 @@ class DECONET(nn.Module):
             x_hat = (
                 x0
                 + (
-                    (1 - theta1) * torch.einsum("as,bs->ba", self.phi.t(), u1)
-                    + theta1 * torch.einsum("as,bs->ba", self.phi.t(), z1)
-                    - (1 - theta2) * torch.einsum("am,bm->ba", self.A.t(), u2)
-                    - theta2 * torch.einsum("am,bm->ba", self.A.t(), u2)
+                    (1 - self.theta1) * torch.einsum("as,bs->ba", self.phi.t(), u1)
+                    + self.theta1 * torch.einsum("as,bs->ba", self.phi.t(), z1)
+                    - (1 - self.theta2) * torch.einsum("am,bm->ba", self.A.t(), u2)
+                    - self.theta2 * torch.einsum("am,bm->ba", self.A.t(), u2)
                 )
                 / mu
             )
 
-            w1 = self.affine_transform1(theta1, u1, z1, t1, x_hat)
-            w2 = self.affine_transform2(theta2, u2, z2, t2, y, x_hat)
+            w1 = self.affine_transform1(self.theta1, u1, z1, t1, x_hat)
+            w2 = self.affine_transform2(self.theta2, u2, z2, t2, y, x_hat)
 
-            z1 = self.first_activation(w1, t1 / theta1)
-            z2 = self.second_activation(w2, t2 * epsilon / theta2)
-            u1 = (1 - theta1) * u1 + theta1 * z1
-            u2 = (1 - theta2) * u2 + theta2 * z2
+            z1 = self.first_activation(w1, t1 / self.theta1)
+            z2 = self.second_activation(w2, t2 * epsilon / self.theta2)
+            u1 = (1 - self.theta1) * u1 + self.theta1 * z1
+            u2 = (1 - self.theta2) * u2 + self.theta2 * z2
 
             t1 = self.alpha * t1
             t2 = self.beta * t2
             muL = torch.sqrt(mu / Lexact).to(DEVICE)
             theta_scale = (1 - muL) / (1 + muL).to(DEVICE)
-            theta1 = torch.min(torch.tensor([1.0]).to(DEVICE), theta1 * theta_scale)
-            theta2 = torch.min(torch.tensor([1.0]).to(DEVICE), theta2 * theta_scale)
+            self.theta1 = torch.min(torch.tensor([1.0]).to(DEVICE), self.theta1 * theta_scale)
+            self.theta2 = torch.min(torch.tensor([1.0]).to(DEVICE), self.theta2 * theta_scale)
 
         return torch.clamp(x_hat, min=min_x, max=max_x)
 
@@ -483,7 +485,7 @@ def train(
     device="cpu",
 ):
 
-    early_stopping = EarlyStopping(patience=5, path=checkpoint_name, mode="min")
+    early_stopping = EarlyStopping(patience=5, path=checkpoint_name, mode="min") #keep in mind: 'train' func includes the validation epochs in addition to train's...
     min_val_mse = np.Inf
 
     for e in range(epochs):
@@ -520,6 +522,9 @@ def train(
             break
 
         if early_stopping.should_stop():
+            #save relevent params before leaving:
+            torch.save(model.theta1,'theta1.pt')
+            torch.save(model.theta2, 'theta2.pt')
             break
 
 
@@ -553,6 +558,7 @@ if __name__ == "__main__":
     epochs = NUM_EPOCHS
 
     checkpoint_name = f"DECONET(synthetic)-{ARGS.layers}L-{ARGS.amb}-red{ARGS.red}-lr{ARGS.lr}-mu{ARGS.mu}-init{ARGS.init}.pt"
+    torch.save(ARGS.mu,'mu.pt')
 
     train(
         model,
