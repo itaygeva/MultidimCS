@@ -67,6 +67,7 @@ class EarlyStopping:
             print(f"Patience used: {self.counter} out of {self.patience}")
             if self.counter >= self.patience:
                 self.early_stop = True
+                self.save_checkpoint(current_metric, model) #I added! save even if
         else:
             self.best_score = score
             self.save_checkpoint(current_metric, model)
@@ -173,6 +174,7 @@ def parse_args():
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 DEBUG = False
 ARGS = parse_args()
+torch.save(ARGS,'ARGS.pt')
 
 # Model parameters
 ACF_ITERATIONS = ARGS.layers  # Number of TFOCS iterations/layers during forward
@@ -271,11 +273,11 @@ class DECONET(nn.Module):
         self.first_activation = TruncationActivation()
         self.second_activation = ShrinkageActivation()
         A = torch.randn(measurements, ambient) / np.sqrt(self.measurements)
-        torch.save(A,'A.pt')
+      #  torch.save(A,'A.pt')
         self.register_buffer("A", A)
         phi = nn.Parameter(self._init_phi())
         self.register_parameter("phi", phi)
-        torch.save(phi, 'phi.pt')
+
 
     def _init_phi(self):
 
@@ -340,28 +342,28 @@ class DECONET(nn.Module):
             x_hat = (
                 x0
                 + (
-                    (1 - self.theta1) * torch.einsum("as,bs->ba", self.phi.t(), u1)
-                    + self.theta1 * torch.einsum("as,bs->ba", self.phi.t(), z1)
-                    - (1 - self.theta2) * torch.einsum("am,bm->ba", self.A.t(), u2)
-                    - self.theta2 * torch.einsum("am,bm->ba", self.A.t(), u2)
+                    (1 - theta1) * torch.einsum("as,bs->ba", self.phi.t(), u1)
+                    + theta1 * torch.einsum("as,bs->ba", self.phi.t(), z1)
+                    - (1 - theta2) * torch.einsum("am,bm->ba", self.A.t(), u2)
+                    - theta2 * torch.einsum("am,bm->ba", self.A.t(), u2)
                 )
                 / mu
             )
 
-            w1 = self.affine_transform1(self.theta1, u1, z1, t1, x_hat)
-            w2 = self.affine_transform2(self.theta2, u2, z2, t2, y, x_hat)
+            w1 = self.affine_transform1(theta1, u1, z1, t1, x_hat)
+            w2 = self.affine_transform2(theta2, u2, z2, t2, y, x_hat)
 
-            z1 = self.first_activation(w1, t1 / self.theta1)
-            z2 = self.second_activation(w2, t2 * epsilon / self.theta2)
-            u1 = (1 - self.theta1) * u1 + self.theta1 * z1
-            u2 = (1 - self.theta2) * u2 + self.theta2 * z2
+            z1 = self.first_activation(w1, t1 / theta1)
+            z2 = self.second_activation(w2, t2 * epsilon / theta2)
+            u1 = (1 - theta1) * u1 + theta1 * z1
+            u2 = (1 - theta2) * u2 + theta2 * z2
 
             t1 = self.alpha * t1
             t2 = self.beta * t2
             muL = torch.sqrt(mu / Lexact).to(DEVICE)
             theta_scale = (1 - muL) / (1 + muL).to(DEVICE)
-            self.theta1 = torch.min(torch.tensor([1.0]).to(DEVICE), self.theta1 * theta_scale)
-            self.theta2 = torch.min(torch.tensor([1.0]).to(DEVICE), self.theta2 * theta_scale)
+            theta1 = torch.min(torch.tensor([1.0]).to(DEVICE), theta1 * theta_scale)
+            theta2 = torch.min(torch.tensor([1.0]).to(DEVICE), theta2 * theta_scale)
 
         return torch.clamp(x_hat, min=min_x, max=max_x)
 
@@ -369,6 +371,7 @@ class DECONET(nn.Module):
         x = x.view(x.size(0), -1)
         min_x = torch.min(x)
         max_x = torch.max(x)
+        torch.save([min_x,max_x],'min_max_x')
 
         y = self.measure_x(x)
         y_noisy = self.noisy_measure(y)
@@ -523,8 +526,7 @@ def train(
 
         if early_stopping.should_stop():
             #save relevent params before leaving:
-            torch.save(model.theta1,'theta1.pt')
-            torch.save(model.theta2, 'theta2.pt')
+            torch.save(model.state_dict(),'model_dict.pt')
             break
 
 
