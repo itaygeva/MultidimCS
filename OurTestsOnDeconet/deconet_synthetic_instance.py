@@ -307,7 +307,7 @@ class DECONET(nn.Module):
 
     def noisy_measure(self, y):
         # add Gaussian noise to y
-        y_noisy = y + 0.0001 * torch.randn_like(y)
+        y_noisy = y #+ 0.0001 * torch.randn_like(y)
 
         return y_noisy
 

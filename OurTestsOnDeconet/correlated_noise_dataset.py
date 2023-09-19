@@ -10,7 +10,7 @@ def generate_highly_correlated_covariance_matrix(num_variables):
     covariance_matrix = 1 * torch.eye(num_variables)
 
     # Set off-diagonal elements (covariances) to a positive constant
-    constant_covariance = 0.9
+    constant_covariance = 0.99
 
     for i in range(num_variables):
         for j in range(i + 1, num_variables):
