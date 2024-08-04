@@ -3,7 +3,11 @@ from torch.linalg import matrix_norm as mn
 import numpy as np
 import create_data
 from PIL import Image
-
+import matplotlib.pyplot as plt
+from torchvision.transforms import Compose, Normalize, ToTensor
+from torch.utils.data import DataLoader
+from torchvision import datasets, transforms
+from torch import nn
 
 ambient = 28*28  #784, MNIST
 measurements=round(0.25 * 784)
@@ -11,6 +15,22 @@ sparse_dim=10
 mu = 100 #deafult
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
+class ShrinkageActivation(nn.Module):
+    def __init__(self):
+        super(ShrinkageActivation, self).__init__()
+
+    def forward(self, x, epsilon):
+        return torch.sign(x) * torch.max(torch.zeros_like(x), torch.abs(x) - epsilon)
+
+
+class TruncationActivation(nn.Module):
+    def __init__(self):
+        super(TruncationActivation, self).__init__()
+
+    def forward(self, x, epsilon):
+        return torch.sign(x) * torch.min(torch.abs(x), epsilon * torch.ones_like(x))
+
 class ENCODER:
     def __init__(self,A):
         self.A = A # size: (m ,amb), m=28*28*0.25, amb=28*28
@@ -46,6 +66,11 @@ class Decoder:
 
         self.sparse_dim = 7840 ##for example for MNIST
         self.ambient = 28*28 ##for example for MNIST
+        self.first_activation = TruncationActivation()
+        self.second_activation = ShrinkageActivation()
+        self.alpha = 0.7
+        self.beta = 0.5
+        self.acf_iterations=10
 
         """learned parameter"""
         self.phi = phi
@@ -91,7 +116,22 @@ class Decoder:
 
         return torch.clamp(x_hat, min=min_x, max=max_x)
 
+    def affine_transform1(self, theta1, u1, z1, t1, x):
+        affine1 = (
+                (1 - theta1) * u1
+                + theta1 * z1
+                - (t1 / theta1) * torch.einsum("sa,ba->bs", self.phi, x)
+        )
 
+        return affine1.detach()
+
+    def affine_transform2(self, theta2, u2, z2, t2, y, x):
+        affine2 = (
+                (1 - theta2) * u2
+                + theta2 * z2
+                - (t2 / theta2) * (y - torch.einsum("sa,ba->bs", self.A, x))
+        )
+        return affine2.detach()
     def noisy_measure(self, y):
         # add Gaussian noise to y
         y_noisy = y + 0.0001 * torch.randn_like(y)
@@ -121,14 +161,24 @@ if __name__ == "__main__":
     state_dict = torch.load(file_name)
     A=state_dict['A']
     enc = ENCODER(A)
-    img = Image.open('mnist_img_norm.png')
-    image_array = np.array(img)
-    img_tens = torch.tensor(image_array)
-    y, min_x, max_x, A = enc.forward(img_tens)
+    # img = Image.open('mnist_img_norm.png')
+    # image_array = np.array(img)
+    # img_tens = torch.tensor(image_array)
+    data_transform = Compose([ToTensor(), Normalize((0.1307,), (0.3081,))]) #to tensor: 0-1
+    mnist_data = datasets.MNIST(root='.', train=False, download=False, transform=data_transform)
+    data_loader = DataLoader(mnist_data, batch_size=128, shuffle=True)
+
+    images, labels = next(iter(data_loader))
+   # image = images[0].squeeze()  # Remove the batch dimension and get the first image
+    y, min_x, max_x = enc.forward(images)
 
     phi = state_dict['phi']
     dec = Decoder(A=A, y=y, mu=mu, phi=phi, min_x=min_x, max_x=max_x)
-    img_hat = dec.forward(y)
+    imgs_hat = dec.forward(y)
+
+    # #plot
+    # pil_image = Image.fromarray((img_hat.numpy() *255).astype('uint8'), mode='L')  # after normalize...
+    # plt.imshow(pil_image, cmap='gray')
 
 
     ##OUR DATA
