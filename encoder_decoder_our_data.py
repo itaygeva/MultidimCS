@@ -159,7 +159,14 @@ class Decoder:
 
 if __name__ == "__main__":
     ##Z
-    file_name = 'DECONET(synthetic our data)-10L-4000-red4000-lr0.0001-mu100-initkaiming-datasets_X-AVG_400x10_ksparse=5%_sig1vt_supp=10.pt'
+    sig1vt_supp=10
+    zt_noise_sigma=0.01
+
+
+    sig1vt_supp_train=10
+    zt_noise_sigma_train=0.01
+    cs_ratio_train=0.25
+    file_name = f"DECONET(synthetic our data)-10L-4000-red4000-lr0.0001-mu100-initkaiming-datasets_Z_400x10_ksparse=5%_sig1vt_supp={sig1vt_supp_train}_zt_noise_sigma={zt_noise_sigma_train}_cs_ratio={cs_ratio_train}_with_tag.pt"
     state_dict = torch.load(file_name)
     A=state_dict['A']
     enc = ENCODER(A)
@@ -167,21 +174,19 @@ if __name__ == "__main__":
     len_test = 1000
     rows = ambient
     cols = N_SENSORS
-    data = OD.Data(rows=rows, cols=cols, sig1vt_supp=10, k_sparse=5)
-    X_dataset_test, C_dataset_test, Z_dataset_test = data.create_Dataset(len_test)
+    data = OD.Data(rows=rows, cols=cols, sig1vt_supp=sig1vt_supp, k_sparse=5,zt_noise_sigma=zt_noise_sigma)
+    X_dataset_test, C_dataset_test, Z_dataset_test,Zt_dataset_test = data.create_Dataset_save_tag(len_test)
    # Z_dataset_test_vecs = Z_dataset_test.transpose(2, 0, 1).reshape(cols, rows * len_test).transpose()
-    # print('Checking Z:')
-    # test=torch.from_numpy(Z_dataset_test).clone().float()
+    print('Checking Z:')
+    test=torch.from_numpy(Z_dataset_test).clone().float()
 
     # print('Checking X:')
     # test=torch.from_numpy(X_dataset_test).clone().float()
 
-    print('Checking X-AVG:')
-    test=torch.from_numpy(X_dataset_test).clone().float()
-    test=test-test.mean(axis=2,keepdims=True)
+    # print('Checking X-AVG:')
+    # test=torch.from_numpy(X_dataset_test).clone().float()
+    # test=test-test.mean(axis=2,keepdims=True)
 
-
-    #test = OD.Synthetic(Z_dataset_test_vecs)
     test_loader = DataLoader(
         test,
         num_workers=2,
@@ -197,14 +202,34 @@ if __name__ == "__main__":
         dec = Decoder(A=A, y=y, mu=mu, phi=phi, min_x=min_x, max_x=max_x)
         z_hat = dec.forward(y)
         print(z_hat)
+        print(z_hat.shape)
+        print(batch)
         mse = criterion(z_hat, batch.view(batch.size(0), -1))
-        normal_mse=mse/torch.norm(torch.from_numpy(X_dataset_test), p='fro')
+        normal_mse_x=mse/torch.norm(torch.from_numpy(X_dataset_test), p='fro')
+        normal_mse_z=mse/torch.norm(batch, p='fro')
         print('mse: ',mse)
-        print('normalize mse:', normal_mse)
+        print('normalized by X mse:', normal_mse_x)
+        print('normalized by Z mse:', normal_mse_z)
 
 
+print('bla')
 
+difference = z_hat - batch.view(batch.size(0), -1)
+flat_difference = difference.flatten()
 
+# Plot the histogram of the differences
+plt.hist(flat_difference.cpu().numpy(), bins=10, alpha=0.75, color='blue')
+plt.title('Histogram of Matrix Differences (Z_hat - Z_dataset_test)')
+plt.xlabel('Difference Value')
+plt.ylabel('Frequency')
+plt.grid(True)
+plt.show()
+# checkpoint_name = f"estimated_Z_test_sigma_{zt_noise_sigma}_support_{sig1vt_supp}.pt"
+# tensors={
+#      'dataset_test':test, #[1000,400,10]
+#      'estimate':z_hat,    #[1000,400*10]
+#  }
+# torch.save(tensors, checkpoint_name)
 
 
 

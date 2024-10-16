@@ -412,7 +412,9 @@ def train_step(
     x_original = x_original.to(device)
     optimizer.zero_grad()
     x_pred = model(x_original)
-    mse = criterion(x_pred, x_original.view(x_original.size(0), -1))
+  #  mse = criterion(x_pred, x_original.view(x_original.size(0), -1))
+    mse= custom_loss(x_pred, x_original.view(x_original.size(0), -1))
+
 
     loss = mse
     loss.backward()
@@ -540,6 +542,24 @@ def train(
         if early_stopping.should_stop():
             break
 
+def custom_loss(x_hat,x):
+    max_x = torch.max(x)
+    if max_x == 0:
+        max_x = 1e-6  # Prevent division by zero
+
+    # Calculate the sigmoid term
+    sigmoid_input = torch.abs(x) + 1 / max_x
+    sigmoid_output = torch.sigmoid(sigmoid_input)
+
+    # Calculate the scale
+    scale = 100 * sigmoid_output + 1
+
+    # Calculate the squared error term
+    error_term = (x - x_hat) ** 2
+
+    # Compute the final loss
+    loss = scale * error_term
+    return loss.mean()  # Return the mean loss over all elements
 
 #######################################################################################
 # Main                                                                                #
@@ -549,29 +569,29 @@ def train(
 if __name__ == "__main__":
     device = "cuda" if torch.cuda.is_available() else "cpu"
     len_train=7000; len_val=1000
-    rows=AMBIENT_DIM; cols=N_SENSORS; k_sparse=5; sig1vt_supp=10
+    rows=AMBIENT_DIM; cols=N_SENSORS; k_sparse=5; sig1vt_supp=10; zt_noise_sigma=0.01
 
-    checkpoint_name = f"save_datasets_{rows}x{cols}_ksparse={k_sparse}%_sig1vt_supp={sig1vt_supp}.pt"
+    checkpoint_name = f"save_datasets_{rows}x{cols}_ksparse={k_sparse}%_sig1vt_supp={sig1vt_supp}_zt_noise_sigma={zt_noise_sigma}.pt"
     loaded_datasets = torch.load(checkpoint_name)
 
     #Now: train and validate on the 'Z' instance:
-    # instance='X'
+    instance='Z'
+    Z_dataset_train=loaded_datasets['Z_dataset_train'] #7000x400x10
+    Z_dataset_val=loaded_datasets['Z_dataset_val']
+    
+    # #Now: train and validate on the 'X_AVG' instance
+    # instance='X-AVG'
     # X_dataset_train=loaded_datasets['X_dataset_train'] #7000x400x10
     # X_dataset_val=loaded_datasets['X_dataset_val']
-    
-    #Now: train and validate on the 'X_AVG' instance
-    instance='X-AVG'
-    X_dataset_train=loaded_datasets['X_dataset_train'] #7000x400x10
-    X_dataset_val=loaded_datasets['X_dataset_val']
 
-    X_dataset_train_MAvg=X_dataset_train-X_dataset_train.mean(axis=2,keepdims=True)
-    X_dataset_val_MAvg=X_dataset_val-X_dataset_val.mean(axis=2,keepdims=True)
+    # X_dataset_train_MAvg=X_dataset_train-X_dataset_train.mean(axis=2,keepdims=True)
+    # X_dataset_val_MAvg=X_dataset_val-X_dataset_val.mean(axis=2,keepdims=True)
 
     ##if I want to train on vector vector independantly (col, col...)
     #Z_dataset_train_vecs=Z_dataset_train.transpose(2, 0, 1).reshape(cols,rows*len_train).transpose()
     #Z_dataset_val_vecs=Z_dataset_val.transpose(2, 0, 1).reshape(cols, rows * len_val).transpose()
 
-    train_loader, val_loader = get_data_loaders(BATCH_SIZE, BATCH_SIZE,X_dataset_train_MAvg,X_dataset_val_MAvg)
+    train_loader, val_loader = get_data_loaders(BATCH_SIZE, BATCH_SIZE,Z_dataset_train,Z_dataset_val)
 
     model = DECONET(
         ambient=AMBIENT_DIM*N_SENSORS,
@@ -588,11 +608,12 @@ if __name__ == "__main__":
     print(model)
     optimizer = Adam(model.parameters(), lr=LEARNING_RATE)
     criterion = nn.MSELoss()
+ #   criterion = nn.L1Loss()
 
     early_stop = EARLY_ID
     epochs = NUM_EPOCHS
 
-    checkpoint_name = f"DECONET(synthetic our data)-{ARGS.layers}L-{ARGS.amb*ARGS.nsens}-red{ARGS.red}-lr{ARGS.lr}-mu{ARGS.mu}-init{ARGS.init}-datasets_{instance}_{rows}x{cols}_ksparse={k_sparse}%_sig1vt_supp={sig1vt_supp}.pt"
+    checkpoint_name = f"DECONET(synthetic our data)-{ARGS.layers}L-{ARGS.amb*ARGS.nsens}-red{ARGS.red}-lr{ARGS.lr}-mu{ARGS.mu}-init{ARGS.init}-datasets_{instance}_{rows}x{cols}_ksparse={k_sparse}%_sig1vt_supp={sig1vt_supp}_zt_noise_sigma={zt_noise_sigma}_cs_ratio={ARGS.meas}_Sigmoid.pt"
 
     train(
         model,

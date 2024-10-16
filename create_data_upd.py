@@ -33,15 +33,15 @@ def generate_brownian_noise(duration=1, fs=400, center=1): #sec,Hz,mean of BN
     return brownian_noise
 
 class Data:
-    def __init__(self,rows,cols,sig1vt_supp,k_sparse):
+    def __init__(self,rows,cols,sig1vt_supp,k_sparse,zt_noise_sigma):
         self.rows=rows
         self.cols=cols
         self.sig1vt_supp=sig1vt_supp
         self.k_sparse=k_sparse   #how many non zero elements, in precentage from the full matrix
         self.num_zeros=self.rows*self.cols*(100-self.k_sparse)   #how many zero elements
+        self.zt_noise_sigma=zt_noise_sigma
 
-
-    def create_X_C_Z(self): #rows=400, cols=13, rows*cols
+    def create_X_C_Z(self,save_tag=False): #rows=400, cols=13, rows*cols
         self.Ct=self.create_Ct()
         self.Zt=self.create_Zt()
         X=self.Ct+self.Zt
@@ -53,7 +53,10 @@ class Data:
         np.fill_diagonal(first_s, np.concatenate((S[0], np.zeros((1,min_rc-1))), axis=None))
         C=U @ first_s @ Vt
         Z=X-C
-        return X,C,Z
+        if save_tag==False:
+            return X,C,Z
+        else: 
+            return X,C,Z,self.Zt
 
 
     def create_Ct(self):
@@ -65,7 +68,7 @@ class Data:
 
     def create_Zt(self):
         mu=0
-        sigma=0.001
+        sigma=self.zt_noise_sigma #it was 0.01 in thr beginning
         num_non_zeros=round(self.k_sparse*(self.cols*self.rows)*0.01)
         k_col_rand=np.random.choice(self.cols, num_non_zeros, replace=True)
         k_row_rand = np.random.choice(self.rows, num_non_zeros, replace=True)
@@ -75,21 +78,34 @@ class Data:
         Zt=matrix
         return Zt
 
-    def create_Dataset(self,num):
+    def create_Dataset(self,num,save_tag=False):
         X_dataset=np.zeros((num,self.rows,self.cols))
         C_dataset = np.zeros((num, self.rows, self.cols))
         Z_dataset = np.zeros((num, self.rows, self.cols))
         for i in range(num):
-            X,C,Z=self.create_X_C_Z()
+            X,C,Z=self.create_X_C_Z(save_tag=save_tag)
             X_dataset[i,:,:] = X
             C_dataset[i, :, :] = C
             Z_dataset[i, :, :] = Z
         return X_dataset,C_dataset,Z_dataset
+    
+    def create_Dataset_save_tag(self,num,save_tag=True):
+        X_dataset=np.zeros((num,self.rows,self.cols))
+        C_dataset = np.zeros((num, self.rows, self.cols))
+        Z_dataset = np.zeros((num, self.rows, self.cols))
+        Zt_dataset = np.zeros((num, self.rows, self.cols))
+        for i in range(num):
+            X,C,Z,Zt=self.create_X_C_Z(save_tag=save_tag)
+            X_dataset[i,:,:] = X
+            C_dataset[i, :, :] = C
+            Z_dataset[i, :, :] = Z
+            Zt_dataset[i, :, :] = Zt
+        return X_dataset,C_dataset,Z_dataset,Zt_dataset
 
 
 
 if __name__ == "__main__":
     pass
-    # data=Data(rows=400,cols=13,sig1vt_supp=10,k_sparse=5)
+    # data=Data(rows=10,cols=10,sig1vt_supp=10,k_sparse=50,zt_noise_sigma=0.01)
     # X,C,Z=data.create_X_C_Z()
-    # print(X,C,Z)
+    # print(Z)
