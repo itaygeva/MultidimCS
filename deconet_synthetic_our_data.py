@@ -412,8 +412,8 @@ def train_step(
     x_original = x_original.to(device)
     optimizer.zero_grad()
     x_pred = model(x_original)
-  #  mse = criterion(x_pred, x_original.view(x_original.size(0), -1))
-    mse= custom_loss(x_pred, x_original.view(x_original.size(0), -1))
+    mse = criterion(x_pred, x_original.view(x_original.size(0), -1))
+   # mse= custom_loss(x_pred, x_original.view(x_original.size(0), -1))
 
 
     loss = mse
