@@ -4,7 +4,5 @@ An attempt to conduct CS (compressed sensing) on multiple sensors of the same ki
 This problem differs from the regular CS pardigm because the signals are neither sparse nor compressible by themselves. 
 We assume the sparsity of the problem arises from the fact that the signals are inherently similar to one another.
 
-* This is currently an ongoing project
-* We have many different approaches that we'd like to try and we shall record them here in text files or otherwise.
+We propose novel approch to pre-process the data, utilize the correlation between the signal, to get efficient compression with very low distortion (MSE) on a relevant toy example.
 
-* We use deconet by Vicky Kourni, with the code from her git repository.
